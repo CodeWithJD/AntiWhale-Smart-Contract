@@ -12,20 +12,37 @@ contract AntiWhale {
     uint256 public totalSupply;
     uint8 public decimals;
 
+    // Define mapping to track each account's balance
     mapping(address => uint256) public balanceOf;
+
+    // Define mapping to track allowance of a spender on behalf of an owner
     mapping(address => mapping(address => uint256)) public allowance;
+
+    // Define mapping to track accounts exempted from token tax
     mapping(address => bool) public isExemptFromTax;
 
+    // Define maximum limit per wallet
     uint256 private maxWalletLimit;
+
+    // Define maximum transfer amount per transaction
     uint256 private maxTransferAmount;
 
+    // Define tax percentage
     uint256 private _taxPercentage;
+
+    // Define tax multiplier for calculating tax
     uint256 private constant _taxMultiplier = 10000;
 
+    // Address of the deployer of the contract (owner)
     address private _deployer;
+
+    // Address of the marketing wallet that receives the tax
     address private _marketingWallet;
 
+    // Event that is triggered when tokens are transferred
     event Transfer(address indexed from, address indexed to, uint256 value);
+
+    // Event that is triggered when an allowance is approved
     event Approval(address indexed owner, address indexed spender, uint256 value);
 
     /**
@@ -33,22 +50,28 @@ contract AntiWhale {
      * @param marketingWallet The address of the marketing wallet.
      */
     constructor(address marketingWallet) {
+        // Initializing token details
         name = "AntiWhale";
         symbol = "MXD";
         totalSupply = 100000 * 10**10; // 10^10 decimals
         decimals = 10;
 
+        // Assigning total supply to the deployer
         balanceOf[msg.sender] = totalSupply;
         emit Transfer(address(0), msg.sender, totalSupply);
 
+        // Setting limits
         maxWalletLimit = totalSupply / 50; // 2% of total supply
         maxTransferAmount = totalSupply / 2000; // 0.05% of total supply
 
+        // Exempting deployer from tax
         isExemptFromTax[msg.sender] = true;
         _deployer = msg.sender;
 
+        // Setting tax percentage
         _taxPercentage = 500; // 5%
 
+        // Setting marketing wallet
         _marketingWallet = marketingWallet;
     }
 
@@ -59,9 +82,11 @@ contract AntiWhale {
      * @return A boolean value indicating whether the transfer was successful.
      */
     function transfer(address to, uint256 value) external returns (bool) {
+        // Perform necessary checks for address and value
         require(to != address(0), "Invalid address");
         require(value > 0, "Invalid amount");
 
+        // If sender is exempted from tax or is the deployer, perform regular transfer
         if (isExemptFromTax[msg.sender] || msg.sender == _deployer) {
             require(balanceOf[msg.sender] >= value, "Insufficient balance");
             require(balanceOf[to] + value <= maxWalletLimit, "Exceeds maximum wallet limit");
@@ -72,6 +97,7 @@ contract AntiWhale {
 
             emit Transfer(msg.sender, to, value);
         } else {
+            // Else, calculate tax, deduct it and transfer the rest
             uint256 taxAmount = (value * _taxPercentage) / _taxMultiplier;
             uint256 transferAmount = value - taxAmount;
 
@@ -82,6 +108,7 @@ contract AntiWhale {
             balanceOf[msg.sender] -= value;
             balanceOf[to] += transferAmount;
 
+            // Transfer the tax to the marketing wallet
             if (taxAmount > 0) {
                 balanceOf[_marketingWallet] += taxAmount;
                 emit Transfer(msg.sender, _marketingWallet, taxAmount);
@@ -102,6 +129,7 @@ contract AntiWhale {
     function approve(address spender, uint256 value) external returns (bool) {
         require(spender != address(0), "Invalid address");
 
+        // Set the allowance for the given spender
         allowance[msg.sender][spender] = value;
         emit Approval(msg.sender, spender, value);
         return true;
@@ -120,7 +148,10 @@ contract AntiWhale {
         require(value > 0, "Invalid amount");
         require(value <= allowance[from][msg.sender], "Exceeds allowance");
 
+        // Decrease the allowance
         allowance[from][msg.sender] -= value;
+
+        // Perform the token transfer
         transferTokens(from, to, value);
         return true;
     }
@@ -152,6 +183,7 @@ contract AntiWhale {
             balanceOf[from] -= value;
             balanceOf[to] += transferAmount;
 
+            // Transfer the tax to the marketing wallet
             if (taxAmount > 0) {
                 balanceOf[_marketingWallet] += taxAmount;
                 emit Transfer(from, _marketingWallet, taxAmount);
@@ -159,52 +191,5 @@ contract AntiWhale {
 
             emit Transfer(from, to, transferAmount);
         }
-    }
-
-    /**
-     * @dev Sets the tax percentage applied to token transfers.
-     * @param percentage The new tax percentage.
-     */
-    function setTaxPercentage(uint256 percentage) external {
-        require(msg.sender == _deployer, "Only deployer can change the tax percentage");
-        _taxPercentage = percentage;
-    }
-
-    /**
-     * @dev Sets the maximum transaction limit.
-     * @param limit The new maximum transaction limit as a percentage of the total supply.
-     */
-    function setMaxTransactionLimit(uint256 limit) external {
-        require(msg.sender == _deployer, "Only deployer can change the max transaction limit");
-        maxTransferAmount = totalSupply * limit / 10000;
-    }
-
-    /**
-     * @dev Sets the maximum tokens per wallet limit.
-     * @param limit The new maximum tokens per wallet limit as a percentage of the total supply.
-     */
-    function setMaxWalletLimit(uint256 limit) external {
-        require(msg.sender == _deployer, "Only deployer can change the max wallet limit");
-        maxWalletLimit = totalSupply * limit / 10000;
-    }
-
-    /**
-     * @dev Sets the address of the marketing wallet.
-     * @param wallet The new marketing wallet address.
-     */
-    function setMarketingWallet(address wallet) external {
-        require(msg.sender == _deployer, "Only deployer can change the marketing wallet");
-        require(wallet != address(0), "Invalid wallet address");
-        _marketingWallet = wallet;
-    }
-
-    /**
-     * @dev Sets the exemption status for the given account from token taxes.
-     * @param account The account address.
-     * @param exempt Whether the account is exempt from taxes.
-     */
-    function setExemptFromTax(address account, bool exempt) external {
-        require(msg.sender == _deployer, "Only deployer can set tax exemptions");
-        isExemptFromTax[account] = exempt;
     }
 }
